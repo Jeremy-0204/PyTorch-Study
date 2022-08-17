@@ -22,3 +22,12 @@
 
 ### Image / Video
 
+## 기타 자료들
+- [파이토치 튜토리얼 실습 코드 모음](https://github.com/pytorch/tutorials)
+- [로짓이란?](https://haje01.github.io/2019/11/19/logit.html#:~:text=%EB%A1%9C%EC%A7%93(logit)%EC%9D%80%20log%20%2B,%ED%81%B0%EC%A7%80%EA%B0%80%20%EA%B2%B0%EC%A0%95%EC%9D%98%20%EA%B8%B0%EC%A4%80.&text=%ED%99%95%EB%A5%A0%EC%9D%98%20%EB%B2%94%EC%9C%84%EB%8A%94%20%5B0,%E2%88%92%E2%88%9E%2C%E2%88%9E%5D%20%EC%9D%B4%EB%8B%A4.)
+- [.pth 파일이란?](https://qlsenddl-lab.tistory.com/41)
+- [수렴율, convergence rate이란?](https://jun-story.tistory.com/33?category=973273)
+- [.item()이란?](https://pytorch.org/docs/stable/generated/torch.Tensor.item.html)
+- [계산 그래프란?](https://deep-learning-study.tistory.com/16)
+- [DAG 알고리즘이란?](https://steemit.com/dag/@cryptodreamers/dag-dag-directed-acyclic-graph)
+
