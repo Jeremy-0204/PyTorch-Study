@@ -1,0 +1,268 @@
+﻿#3 PyTorch Study
+    **Introduction to PyTorch**
+        Automatic Differentiation with torch autograd
+        실제 신경망을 학습시킬때 가장 많이 사용되는 알고리즘은 **Back Propagation (역전파)**이다.
+        이 알고리즘은 parameters 매개변수 (Model Weights, 가중치) 들이 주어진 매개변수에 대한 loss function 손실함수의 gradient 변화도를 따라 adjusted 된다.
+        
+        # 잠시 단어 정리!
+        - back propagation: 역전파
+        - parameters: 매개변수
+        - weights: 가중치
+        - loss function: 손실함수
+        - gradient: 변화도
+        
+        그럼 gradient를 어떻게 계산하는가?
+        파이토치는 자체 미분엔진인 torch.autograd가 내장되어 있는데, 이는 모든 computational graph, 계산 그래프에 대한 변화도의 자동 계산을 지원한다. 
+        
+        입력 x, 매개변수 w, b 그리고 일부의 손실 함수가 있는 가장 간단한 단일 계층 신경망을 가정해본다면 다음과 같이 정의할 수 있다. 
+        
+        ```import torch
+        
+        x = torch.ones(5) # input tensor
+        y = torch.zeros(3) # expected output
+        w = torch.randn(5, 3, requires_grad=True)
+        b = torch.randn(3, requires_grad=True)
+        z = torch.matmul(x, w)+b
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(z, y)```
+        
+        
+        **- Tensors, Functions and Computational graph**
+        # Tensors
+        위의 코드는 다음과 같은 계산 그래프를 만들어 낸다. 
+        
+        computational graph: 계산 그래프(computational graph)란 계산 과정을 그래프로 나타낸 것입니다. 그래프는 노드(node)와 에지(edge)로 표현됩니다. 에지는 노드 사이의 직선을 나타냅니다.
+        
+         ![Pasted image](https://dynalist.io/u/tSmjzbL4IBZinkK8DpZD0GwF) 
+        
+        w, b는 우리가 최적화를 시켜야 할 매개변수이다.
+        그렇기 때문에 각 변수에 대한 손실함수의 변화도를 계산해야 하는데 이를 위해 해당 텐서들의 `requires_grad` property를 사용할 것이다. 텐서를 만들때 사용하거나 나중에 tensor_var.requires_grad_(True)로 사용할 수 있다. 
+        
+        
+        # Functions
+        우리가 계산 그래프를 생성하기 위해 텐서에 적용하는 함수는 사실 class `Function`의 오브젝트이다. 
+        이 오브젝트는 함수를 foward direction으로 계산할 줄 알면서 동시에 역전파 단계의 해당 함수의 미분값도 계산할 줄 안다. tensor의 여러 property 중 `grad_fn`에 역전파 함수가 저장되어 있다. 
+        
+        
+        **- Computing Gradients**
+        신경망의 매개변수들의 가중치를 최적화 시키려면 매개변수에 대한 손실함수의 미분값을 계산해야 한다. 고정된 x y아래, 손실값을 가중치로 미분한 값과 손실값을 bias로 미분한 값이 필요하기에 `loss.backward()`를 호출한 뒤, w.grad, b.grad의 값을 가져오면 된다. 
+        
+        # 주의사항
+        - grad property는 오직 계산 그래프의 leaf node에서만 가져올 수 있는데, `requires_grad`가 `true`로 지정되어 있어야만 한다. 
+        - 변화도 계산은 주어진 그래프의 `backward`로 단 한번 밖에 못한다. 이는 performance issue 때문인데, 같은 그래프 안에서 여러번 backward를 불러야 할 때는 `retain_graph = True`를 `backward`에서 불러줘야 한다. 
+        
+        
+        **- Disabling Gradient Tracking**
+        기본적으로`requires_grad=True`로 설정된 모든 텐서들은 그 계산 history을 트래킹함으로 gradient 계산을 돕는다. 
+        근데 이게 필요 없을 때도 있는데, 모델을 학습시키고 몇몇 입력 데이터에만 적용 시키고 싶을때, foward만 하면 되는 상황일때는 computation code를 `torch.no_grad()` 블럭으로 둘러싸서 computations를 stop tracking 할 수 있다.
+        
+        ```z = torch.matmul(x, w)+b
+        print(z.requires_grad)
+        
+        with torch.no_grad():
+         z = torch.matmul(x, w)+b
+        print(z.requires_grad)```
+        
+        ```z = torch.matmul(x, w)+b
+        z_det = z.detach()
+        print(z_det.requires_grad)```
+        
+        왜 gadient tracking을 disable하는 상황이 생길까?
+        - 몇몇 매개변수를 고정? Frozen으로 mark 해야 하는 경우이다. 이는 finetuning a pretrained network 에서 자주 볼 수 있는 경우이다.
+        - 계산을 더 빠르게 하기 위해서 그런 경우도 있다. foward pass만 할 때는 텐서에 대한 계산이 gradient track를 하지 않는게 더 효율적이다. 
+        
+        
+        **- More on Computational Graph**
+        개념적으로, autograd는 데이터(텐서)의 및 실행된 모든 연산들(및 연산 결과가 새로운 텐서인 경우도 포함하여)의 기록을 [Function](https://pytorch.org/docs/stable/autograd.html#torch.autograd.Function) 객체로 구성된 방향성 비순환 그래프(DAG; Directed Acyclic Graph)에 저장(keep)합니다. 
+        
+        이 방향성 비순환 그래프(DAG)의 잎(leave)은 입력 텐서이고, 뿌리(root)는 결과 텐서입니다. 이 그래프를 뿌리에서부터 잎까지 추적하면 연쇄 법칙(chain rule)에 따라 변화도를 자동으로 계산할 수 있습니다.
+        
+        순전파 단계에서, autograd는 다음 두 가지 작업을 동시에 수행합니다:
+        
+        	요청된 연산을 수행하여 결과 텐서를 계산하고,
+        
+        	DAG에 연산의 __변화도 기능(gradient function)__ 를 유지(maintain)합니다.
+        
+        역전파 단계는 DAG 뿌리(root)에서 .backward() 가 호출될 때 시작됩니다. autograd는 이 때:
+        
+        	각 .grad_fn 으로부터 변화도를 계산하고,
+        
+        	각 텐서의 .grad 속성에 계산 결과를 쌓고(accumulate),
+        
+        	연쇄 법칙을 사용하여, 모든 잎(leaf) 텐서들까지 전파(propagate)합니다.
+        
+        # Note
+        파이토치의 DAG, 계산 그래프는 동적이다. 동적이라 함은 계산을 함과 동시에 처음부터 그래프가 다시 생성된다는 것이다. `.backward()`가 호출되면 autograd는 새로운 그래프를 채우기 시작한다 (populate). 이러한 점 때문에 모델에서 흐름 제어 (control flow) 구문들을 사용할 수 있으며, 매번 반복 (iteration) 할 때마다 필요하면 모양이나 크기 연산등을 바꿀 수 있게 된다. 
+        
+        
+        **- Optional Reading: Tensor Gradients and Jacobian Products**
+        대부분의 경우에는 스칼라 손실 함수를 가지고 매개변수와 관련한 변화도를 계산해야 한다. 
+        그러나 출력 함수가 임의의 텐서인 경우, 파이토치는 실제 변화도가 아닌 야코비안 곱을 계산한다.
+        
+        # 스칼라 함수는 0개 이상의 파라메터를 받아 단 하나의 값을 반환하는 함수이다. 
+        # 아웃풋이 텐서인 경우를 말하는건가?
+        
+         ![Pasted image](https://dynalist.io/u/o_UoYsYCZXpToGq8j751haVO) 
+        
+        이 때 input x 벡터에 대한 출력 y 벡터의 변화도는 야코비안 행렬로 주어진다. 
+        야코비안 행렬 자체를 계산하는게 아닌 Jacobian product, vT * J 를 계산한다. 이는 v를 인자로 `backward`를 호출하면 이뤄진다. 
+        
+        v의 크기는 곱을 계산하려고 하는 원래 텐서의 크기와 같아야 한다. 
+        
+        주의할게, backward를 여러번 같은 인자로 호출하면 변화도가 달라지는데, 이는 역전파 진행시 파이토치에서는 경사도를 축적하기 때문이다. 계산된 경사도가 모든 계산 그래프의 leaf node grad property에 더해진다. 제대로 경사도를 계산하려면 grad property를 0으로 만들어줘야 한다. optimizer를 학습시키는것이 도움이 된다. 
+        
+        backward()를 호출하는 것은 backward(torch.tensor(1,0)) 을 부르는 거나 마찬가지인데, 경사도를 스칼라 valued 함수로 계산하기에 유용하다. 로스를 구하는 등에 있어서. 
+        Optimizing Model Parameters [모델 매개변수 최적화]
+        모델도 있고, 데이터도 있곘다, 실제 학습, 평가 그리고 모델을 테스트 해야 한다.
+        이는 패러미터, 데어터의 매개변수들을 최적화함으로 진행된다. 
+        모델을 학습시키는 과정은 반복을 통해 이뤄지며, 각 반복 (epoch)는 모델이 출력값을 예측하고, 그 예측값 loss 안에서 에러를 계산하며, 에러의 도함수를 모아 이들을 경사하강법으로 최적화 시킨다.
+        
+        **- Prerequisite Code**
+        ```
+        import torch
+        from torch import nn
+        from torch.utils.data import DataLoader
+        from torchvision import datasets
+        from torchvision.transforms import ToTensor, Lambda
+        
+        training_data = datasets.FashionMNIST(
+            root="data",
+            train=True,
+            download=True,
+            transform=ToTensor()
+        )
+        
+        test_data = datasets.FashionMNIST(
+            root="data",
+            train=False,
+            download=True,
+            transform=ToTensor()
+        )
+        
+        train_dataloader = DataLoader(training_data, batch_size=64)
+        test_dataloader = DataLoader(test_data, batch_size=64)
+        
+        class NeuralNetwork(nn.Module):
+            def __init__(self):
+                super(NeuralNetwork, self).__init__()
+                self.flatten = nn.Flatten()
+                self.linear_relu_stack = nn.Sequential(
+                    nn.Linear(28*28, 512),
+                    nn.ReLU(),
+                    nn.Linear(512, 512),
+                    nn.ReLU(),
+                    nn.Linear(512, 10),
+                )
+        
+            def forward(self, x):
+                x = self.flatten(x)
+                logits = self.linear_relu_stack(x)
+                return logits
+        
+        model = NeuralNetwork()
+        ```
+        
+        
+        **-  Hyperparameters**
+        모델 최적화 과정을 제어할 수 있는 조절 가능한 매개변수이다.
+        서로 다른 하이퍼 파라매터값은 모델 학습과 수렴율 (convergence rate)에 영향을 미칠 수 있다. 
+        
+        수렴율 : how fast the difference between 정답이랑 예측값 goes to zero
+        
+        다음과 같은 하이퍼 파라매터를 정의한다. 
+        Number of Epochs - 데이터셋을 반복하는 횟수
+        Batch Size - 매개변수가 갱신되기 전 신경망을 통해 전파된 데이터 샘플의 수
+        Learning Rate - 각 배치, 에폭에서 모델의 매개변수를 조절하는 비율. 값이 작을수록 학습 속도가 느려지고, 값이 크면 학습 중 예측 할 수 없는 동작 발생
+        
+        
+        **- Optimization Loop**
+        하이퍼 패러미터 설정 -> 모델 최적화 (각 반복을 에폭이라고 부름)
+        각 epoch consists of 2 main 단게들:
+        	# The Train Loop - 학습용 데이터셋을 반복하고 최적의 매개변수로 수렴시킨다.
+        	# The Validation / Test Loop - 테스트 데이터셋을 반복하면서 모델의 성능 개선을 확인한다.
+        
+        **- Loss Function [손실함수]**
+        트레이닝 데이터가 주어지면, 아직 학습되지 않은 신경망은 정답을 제공하지 못할 확률이 크겠지?
+        이떄 손실함수는 획들한 결과랑 실제 값 사이의 틀린 정도 Defree of dissimilarity를 측정하며, 학습 중 이 값을 최소화하려 한다. 예측과 정답 비교. 손실을 계산
+        회귀 문제 (regression task) - nn.MSELoss
+        분류 문제 (classification task) - nn.NLLLoss, LogSoftmax와 이를 합친 nn.CrossEntropyLoss 등이 있음
+        
+        로짓은 [0,1] 범위의 확률을 [-무한대, 무한대]로 범위를 넓혀줘서, 딥러닝에서는 확률화되지 않은 날 예측 결과를 로짓이라 부르며 입력으로 사용된다. 
+        
+        모델의 출력 로짓을 nn.CrossEntropyLoss에 전달하여 로짓을 정규화하고 예측 오류를 계산한다. 
+        
+        
+        **- Optimizer**
+        최적화란 무엇이냐? 각 학습 단계에서 모델의 오류를, loss를 줄이기 위해 모델 매개변수들을 조정하는 과정입니다. 최적화 알고리즘을 정의하게 된다. 
+        
+        모든 최적화 절차는 optimizer 객체에 캡슐화 encapsulate 된다.
+        
+        여기서는 SGD stochastic gradient descent를 사용하는데, ADAM, RMSProp 등 다양한 옵티마이저가 있다. 
+        
+        학습하려는 모델의 매개변수와 학습률, 하이퍼파라매터를 틍록하며 초기화시켜준다. 
+        
+        결국 학습단계에서 최적화는 3단계로 구성되는데,
+        - optimizer.zero_grad(): 모델 매개변수의 변화도를 재설정한다. 중복계산을 막기 위해서
+        - loss.backwards(): prediction loss를 역전파한다. 각 매개변수에 대한 손실의 변화도를 저장한다. gradients of the loss
+        - gradient를 계산하면, optimizer.step()을 호출해서 수집된 변화도로 매개변수를 조정한다. 
+        
+        
+        Save and Load the Model
+        모델의 예측을 저장, 불러오기, 실행을 통해 모델의 상태를 유지하는 방법
+        
+        **-Saving and Loading Model Weights**
+        파이토치는 학습한 매개변수를 state_dict라고 불리는 내부 상태 사전 (internal state dictionary)에 저장한다. 이 상태 값들은 torch.save 메소드를 사용하여 저장할 수 있다. 
+        
+        ```model = models.vgg16(pretrained=True)
+        torch.save(model.state_dict(), 'model_weights.pth')```
+        
+        모델의 가중치를 불러올때는 동일 모델의 인스턴스를 생성한 다음, load_state_dict()로 매개변수들을 불러온다. 
+        
+        ```model = models.vgg16() # 기본 가중치를 불러오지 않으므로 pretrained=True를 지정하지 않습니다.
+        model.load_state_dict(torch.load('model_weights.pth'))
+        model.eval()```
+        
+        pretrained=True가 없으면 default weight를 불러오지 않는 것이다. 
+        
+        추론 inferencing 하기전에 반드시 model.eval()을 꼭 불러줘야 한다. 이는 드롭아웃 dropout과 배치 정규화 batch normalization을 평가모드로 설정하기 위해서 인데, 안그러면 일관성 없는 추론 결과가 생성되기 때문이다. 
+        
+        	# 추론이란? Deep learning inference is the process of using a trained DNN model to make predictions against previously unseen data.
+        
+        	# 드롭아웃이란? Drop-out은 서로 연결된 연결망(layer)에서 0부터 1 사이의 확률로 뉴런을 제거(drop)하는 기법입니다. 예를 들어, 위의 **__그림 1 __**과 같이 drop-out rate가 0.5라고 가정하겠습니다. Drop-out 이전에 4개의 뉴런끼리 모두 연결되어 있는 전결합 계층(Fully Connected Layer)에서 4개의 뉴런 각각은 0.5의 확률로 제거될지 말지 랜덤하게 결정됩니다. 위의 예시에서는 2개가 제거된 것을 알 수 있습니다. 즉, 꺼지는 뉴런의 종류와 개수는 오로지 랜덤하게 drop-out rate에 따라 결정됩니다. Drop-out Rate는 하이퍼파라미터이며 일반적으로 0.5로 설정합니다.
+        
+        그렇다면 Drop-out 기법을 사용하는 이유는 무엇일까요? 결론부터 말씀드리자면, Drop-out은 어떤 특정한 설명변수 Feature만을 과도하게 집중하여 학습함으로써 발생할 수 있는 [과대적합(Overfitting)](https://heytech.tistory.com/125)을 방지하기 위해 사용됩니다.
+        
+        편향되지 않은 출력값. 
+        
+        	# 배치 놈이란? 
+        	batch normalization은 학습 과정에서 각 배치 단위 별로 데이터가 다양한 분포를 가지더라도 각 배치별로 평균과 분산을 이용해 정규화하는 것을 뜻합니다.
+        
+        평가모드에서의 드롭아웃과 배치놈이 다른가보다
+        그래서 추론할때 데이터를 불러오면 model.eval()을 사용하는 것. 
+        
+        
+        **- Saving and Loading Models with Shapes**
+        .pth는 모델의 확장자 명
+        
+        모델의 가중치를 불러올때는 신경망의 구저가 정의되어 해서 모델 클래스는 먼저 생성 instantiate 해야 한다. 이 클래스의 구조까지 모델과 함께 저장하려면 model.state_dict()가 아닌 model을 저장 함수에 전달한다. 
+        
+        ```torch.save(model, 'model.pth')```
+        ```model = torch.load('model.pth')```
+        
+        이 접근 방식은 Python [pickle](https://docs.python.org/3/library/pickle.html) 모듈을 사용하여 모델을 직렬화(serialize)하므로, 모델을 불러올 때 실제 클래스 정의(definition)를 적용(rely on)합니다.
+        
+        클래스 정의가 불려올때, 피클이라 모델을 직렬화 시켜서 가능함. 
+        
+        **직렬화**(直列化) 또는 **시리얼라이제이션**(serialization)은 [컴퓨터 과학](https://ko.wikipedia.org/wiki/%EC%BB%B4%ED%93%A8%ED%84%B0_%EA%B3%BC%ED%95%99)의 데이터 스토리지 문맥에서 [데이터 구조](https://ko.wikipedia.org/wiki/%EB%8D%B0%EC%9D%B4%ED%84%B0_%EA%B5%AC%EC%A1%B0)나 [오브젝트](https://ko.wikipedia.org/wiki/%EC%98%A4%EB%B8%8C%EC%A0%9D%ED%8A%B8) 상태를 동일하거나 다른 컴퓨터 환경에 저장(이를테면 [파일](https://ko.wikipedia.org/wiki/%EC%BB%B4%ED%93%A8%ED%84%B0_%ED%8C%8C%EC%9D%BC)이나 메모리 [버퍼](https://ko.wikipedia.org/wiki/%EB%8D%B0%EC%9D%B4%ED%84%B0_%EB%B2%84%ED%8D%BC)에서, 또는 [네트워크](https://ko.wikipedia.org/wiki/%EC%BB%B4%ED%93%A8%ED%84%B0_%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%81%AC) 연결 링크 간 전송)하고 나중에 재구성할 수 있는 포맷으로 변환하는 과정이다.
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
